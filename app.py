@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Flask
+from flask import Flask, render_template, jsonify, request
 from firebase_admin import credentials, firestore, initialize_app
 from dotenv import load_dotenv
 
