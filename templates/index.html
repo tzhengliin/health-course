@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>學員清單</title>
+    <title>學員管理系統</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
@@ -15,11 +15,14 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
+                <ul class="navbar-nav me-auto">
                     <li class="nav-item">
                         <a class="nav-link active" href="#">首頁</a>
                     </li>
                 </ul>
+                <span id="welcomeUser" class="me-3"></span>
+                <button class="btn btn-danger" id="logoutBtn" style="display: none;">登出</button>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#loginModal" id="loginBtn">登入</button>
             </div>
         </div>
     </nav>
@@ -32,51 +35,253 @@
 
     <!-- Content -->
     <div class="container my-5">
+        <button class="btn btn-success mb-3" id="addStudentBtn" data-bs-toggle="modal" data-bs-target="#studentModal" style="display: none;">新增學員資料</button>
         <h2 class="text-center mb-4">學員清單</h2>
         <table class="table table-striped">
             <thead>
                 <tr>
+                    <th class="modifyBtn" style="display: none;">操作</th>
                     <th>姓名</th>
                     <th>所屬教練</th>
                     <th>開始日期</th>
                     <th>結束日期</th>
                     <th>今日菜單</th>
-                    <th>操作</th>
                 </tr>
             </thead>
-            <tbody>
-                {% for student in students %}
-                <tr>
-                    <td>{{ student.name }}</td>
-                    <td>{{ student.coach }}</td>
-                    <td>{{ student.StartTime.strftime('%Y-%m-%d') }}</td>
-                    <td>{{ student.EndTime.strftime('%Y-%m-%d') }}</td>
-                    <td>{{ student.Recipe | join(', ') }}</td>
-                    <td>
-                        <button class="btn btn-primary btn-sm" onclick="showDetails('{{ student.id }}')">詳情</button>
-                    </td>
-                </tr>
-                {% endfor %}
+            <tbody id="studentTable">
+                <!-- 學員資料將通過 JS 動態渲染 -->
             </tbody>
         </table>
     </div>
 
-    <!-- Footer -->
-    <footer class="bg-light text-center py-3">
-        <p>&copy; 2024 學員管理系統</p>
-    </footer>
+    <!-- Student Modal -->
+    <div class="modal fade" id="studentModal" tabindex="-1" aria-labelledby="studentModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="studentModalLabel">新增/修改學員資料</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="studentForm">
+                        <input type="hidden" id="studentId">
+                        <div class="mb-3">
+                            <label for="studentName" class="form-label">姓名</label>
+                            <input type="text" class="form-control" id="studentName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="coachName" class="form-label">所屬教練</label>
+                            <input type="text" class="form-control" id="coachName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="startDate" class="form-label">開始日期</label>
+                            <input type="date" class="form-control" id="startDate" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="endDate" class="form-label">結束日期</label>
+                            <input type="date" class="form-control" id="endDate" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="recipe" class="form-label">今日菜單</label>
+                            <input type="text" class="form-control" id="recipe" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" id="deleteStudentBtn" style="display: none;">刪除</button>
+                    <button type="button" class="btn btn-primary" id="saveStudentBtn">儲存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="loginModalLabel">登入</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="loginForm">
+                        <div class="mb-3">
+                            <label for="account" class="form-label">帳號</label>
+                            <input type="text" class="form-control" id="account" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">密碼</label>
+                            <input type="password" class="form-control" id="password" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="loginSubmitBtn">登入</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function showDetails(studentId) {
-            fetch(`/student/${studentId}`)
+        let loggedInUser = null;
+
+        // 清空表單
+        function clearStudentForm() {
+            document.getElementById('studentForm').reset();
+            document.getElementById('studentId').value = '';
+            document.getElementById('deleteStudentBtn').style.display = 'none';
+        }
+
+        // 載入學員清單
+        function loadStudents() {
+            fetch('/students')
                 .then(response => response.json())
                 .then(data => {
-                    alert(`姓名: ${data.name}\n所屬教練: ${data.coach}\n開始日期: ${data.StartTime}\n結束日期: ${data.EndTime}\n今日菜單: ${data.Recipe.join(', ')}`);
+                    const tableBody = document.getElementById('studentTable');
+                    tableBody.innerHTML = '';
+                    data.forEach(student => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td class="modifyBtn">
+                                <button class="btn btn-warning btn-sm" onclick="editStudent('${student.id}')">修改</button>
+                            </td>
+                            <td>${student.name}</td>
+                            <td>${student.coach}</td>
+                            <td>${student.start}</td>
+                            <td>${student.end}</td>
+                            <td>${student.recipe}</td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
                 })
                 .catch(error => console.error('Error:', error));
         }
+
+        // 編輯學員資料
+        function editStudent(studentId) {
+            fetch(`/students/${studentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('studentId').value = data.id;
+                    document.getElementById('studentName').value = data.name;
+                    document.getElementById('coachName').value = data.coach;
+                    document.getElementById('startDate').value = data.start;
+                    document.getElementById('endDate').value = data.end;
+                    document.getElementById('recipe').value = data.recipe;
+                    document.getElementById('deleteStudentBtn').style.display = 'inline-block';
+                    new bootstrap.Modal(document.getElementById('studentModal')).show();
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        // 儲存學員資料
+        document.getElementById('saveStudentBtn').addEventListener('click', () => {
+            const student = {
+                id: document.getElementById('studentId').value || undefined,
+                name: document.getElementById('studentName').value,
+                coach: document.getElementById('coachName').value,
+                start: document.getElementById('startDate').value,
+                end: document.getElementById('endDate').value,
+                recipe: document.getElementById('recipe').value,
+            };
+            const method = student.id ? 'PUT' : 'POST';
+            const url = student.id ? `/students/${student.id}` : `/students`;
+
+            fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(student),
+            })
+                .then(response => response.json())
+                .then((data) => {
+                    if (data.error) {
+                        alert(`操作失敗: ${data.error}`);
+                    } else {
+                        loadStudents();
+                        new bootstrap.Modal(document.getElementById('studentModal')).hide();
+                        clearStudentForm(); // 清空表單
+                        alert(method === 'POST' ? '學員新增成功！' : '學員修改成功！');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('操作失敗，請稍後再試！');
+                });
+        });
+
+        // 刪除學員資料
+        document.getElementById('deleteStudentBtn').addEventListener('click', () => {
+            const studentId = document.getElementById('studentId').value;
+            fetch(`/students/${studentId}`, { method: 'DELETE' })
+                .then(response => response.json())
+                .then(() => {
+                    loadStudents();
+                    new bootstrap.Modal(document.getElementById('studentModal')).hide();
+                    clearStudentForm(); // 清空表單
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        // 登入
+        document.getElementById('loginSubmitBtn').addEventListener('click', () => {
+            const account = document.getElementById('account').value;
+            const password = document.getElementById('password').value;
+
+            if (!account || !password) {
+                alert('請輸入帳號與密碼');
+                return;
+            }
+
+            fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ account, password }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        loggedInUser = account;
+                        document.getElementById('welcomeUser').textContent = `歡迎 ${loggedInUser}`;
+                        document.getElementById('loginBtn').style.display = 'none';
+                        document.getElementById('logoutBtn').style.display = 'inline-block';
+                        document.getElementById('addStudentBtn').style.display = 'inline-block';
+
+                        // 顯示 modifyBtn 欄位
+                        Array.from(document.getElementsByClassName('modifyBtn')).forEach((element) => {
+                            element.style.display = 'table-cell';
+                        });
+
+                        new bootstrap.Modal(document.getElementById('loginModal')).hide();
+                    } else {
+                        alert(data.error || '登入失敗');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+
+        // 登出
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            // 清除登入使用者資訊
+            loggedInUser = null;
+            document.getElementById('welcomeUser').textContent = '';
+            document.getElementById('loginBtn').style.display = 'inline-block';
+            document.getElementById('logoutBtn').style.display = 'none';
+            document.getElementById('addStudentBtn').style.display = 'none';
+
+            // 隱藏 modifyBtn 欄位
+            Array.from(document.getElementsByClassName('modifyBtn')).forEach((element) => {
+                element.style.display = 'none';
+            });
+
+            alert('已成功登出！');
+        });
+
+
+        // 初始化
+        loadStudents();
     </script>
 </body>
 </html>
